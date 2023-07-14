@@ -1,52 +1,354 @@
-# Prerequisites
-*.d
+#include "stdlib.h"
+#include "stdio.h"
+#include "string.h"
+#define STR_SIZE 256
+struct Sneakers {
+    int id;
+    struct Sneakers* next;
+    struct Sneakers* prev;
+    char* name;
+    char* company;
+    int size;
+    float rating;
+};
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+struct SneakerShop {
+    int size;
+    struct Sneakers* first;
+    struct Sneakers* last;
+};
 
-# Linker output
-*.ilk
-*.map
-*.exp
+typedef struct Sneakers Sneakers;
+typedef struct SneakerShop SneakerShop;
 
-# Precompiled Headers
-*.gch
-*.pch
+void read_csv(char* filename, SneakerShop * target) {
+    FILE *fp;
+    fp = fopen(filename,"r");
+    if (!fp) {
+        printf("file not found - list would be empty\n");
+        return;
+    }
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
+    Sneakers* sneakers;
+    sneakers = malloc(sizeof(Sneakers));
+    target->size = 0;
+    target->first = sneakers;
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+    char line[STR_SIZE];
+    while (!feof(fp)) {
+        fgets(line, STR_SIZE, fp);
+        sneakers->id = atoi(strtok(line, ";"));
+        sneakers->name = malloc(sizeof(char) * STR_SIZE);
+        strcpy(sneakers->name, strtok(NULL, ";"));
+        sneakers->company = malloc(sizeof(char) * STR_SIZE);
+        strcpy(sneakers->company, strtok(NULL, ";"));
+        sneakers->size = atoi(strtok(NULL, ";"));
+        sneakers->rating = atof(strtok(NULL, ";"));
+        target->size++;
+        target->last = sneakers;
+        sneakers = malloc(sizeof(Sneakers));
+        sneakers->prev = target->last;
+        target->last->next = sneakers;
+    }
+    target->last->next = NULL;
+    target->first->prev = NULL;
+    fclose(fp);
+}
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+void print_sneaker(Sneakers * sneakerShop) {
+    printf("%i. \t%s - %s\t| %i:%i\t| %.1f/10\n",
+           sneakerShop->id,
+           sneakerShop->name,
+           sneakerShop->company,
+           sneakerShop->size,
+           sneakerShop->rating);
+}
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+
+void print_list(SneakerShop * target) {
+    Sneakers * cur;
+    if (target->size == 0) {
+        printf("Database is empty for now\n");
+        return;
+    }
+    printf("Up to date file data:\n");
+    printf("id | name - company | size | rating\n");
+    cur = target->first;
+    while (cur != NULL) {
+        print_sneaker(cur);
+        cur = cur->next;
+    }
+}
+
+
+void print_list_by_param(SneakerShop * target) {
+    int mode, flag;
+    char substr[STR_SIZE];
+    Sneakers *cur;
+
+    printf("Choose parameter to find:\n1 - by name\n2 - by company\n");
+    scanf("\n%i", &mode);
+    if (mode != 1 && mode != 2) {
+        printf("WRONG INPUT\n");
+        return;
+    }
+    printf("Enter name or part of name: ");
+    scanf("%s", substr);
+    printf("Up to date file data by selected parameter:\n");
+    printf("id | name - company | size | rating\n");
+    cur = target->first;
+    flag = 0;
+    while (cur != NULL) {
+        if (mode == 1 && strstr(cur->name, substr) != NULL || mode == 2 && strstr(cur->company, substr) != NULL) {
+            print_sneaker(cur);
+            flag = 1;
+        }
+        cur = cur->next;
+    }
+    if (!flag) printf("Nothing found\n");
+}
+
+
+int contains(const int* array, int size, int value) {
+    int i;
+    for (i = 0; i < size; i++) {
+        if (array[i] == value) return 1;
+    }
+    return 0;
+}
+
+
+void print_sorted_list(SneakerShop * target) {
+    int mode, i;
+    int used_ids[target->size];
+    memset(used_ids, 0, sizeof used_ids);
+    Sneakers * cur, *min;
+
+    if (target->size == 0) {
+        printf("Database is empty for now\n");
+        return;
+    }
+
+    printf("Choose parameter to sort:\n1 - by name\n2 - by company\n3 - by size\n4 - by rating\n");
+    scanf("\n%i", &mode);
+    if (mode < 1 || mode > 4) {
+        printf("WRONG INPUT\n");
+        return;
+    }
+    printf("Up to date file data sorted by selected parameter:\n");
+    printf("id | name - company | size | rating\n");
+
+    for (i = 0; i < target->size;i++) {
+        min = NULL;
+        cur = target->first;
+        while (cur != NULL) {
+            if (!contains(used_ids, target->size, cur->id) &&
+                (min == NULL ||
+                 mode == 1 && strcmp(cur->name, min->name) < 0 ||
+                 mode == 2 && strcmp(cur->company, min->company) < 0 ||
+                 mode == 3 && cur->size > min->size ||
+                 mode == 4 && cur->rating > min->rating)) min = cur;
+            cur = cur->next;
+        }
+        used_ids[i] = min->id;
+        print_sneaker(min);
+    }
+}
+
+
+void update_file(char* filename, SneakerShop * target) {
+    Sneakers * cur;
+    FILE *fp;
+    char new_filename[STR_SIZE+4];
+    strcpy(new_filename, filename);
+    new_filename[strlen(new_filename) - 4] = '\0';
+    strcat(new_filename, "_dlt.csv");
+    fp = fopen(new_filename, "w");
+    cur = target->first;
+    while (cur != NULL) {
+        if (cur != target->first) fprintf(fp, "\n");
+        fprintf(fp, "%i;%s;%s;%i;%f",
+                cur->id,
+                cur->name,
+                cur->company,
+                cur->size,
+                cur->rating);
+        cur = cur->next;
+    }
+    fclose(fp);
+    rename(new_filename, filename);
+}
+
+
+void delete_by_id(char* filename, SneakerShop * target, int id) {
+    Sneakers * cur, *to_delete = NULL;
+    cur = target->first;
+    while (cur != NULL) {
+        if (cur->id == id) to_delete = cur;
+        cur = cur->next;
+    }
+
+    if (to_delete == NULL) {
+        printf("line not found\n");
+        return;
+    }
+
+    if (target->size == 1) {
+        target->first = NULL;
+        target->last = NULL;
+    } else if (target->last == to_delete) {
+        target->last = target->last->prev;
+        target->last->next = NULL;
+    } else if (target->first == to_delete) {
+        target->first = target->first->next;
+        target->first->prev = NULL;
+    } else {
+        to_delete->next->prev = to_delete->prev;
+        to_delete->prev->next = to_delete->next;
+    }
+    target->size--;
+    free(to_delete->name);
+    free(to_delete->company);
+    free(to_delete);
+
+    update_file(filename, target);
+}
+
+
+
+void delete(char* filename, SneakerShop * target) {
+    int id;
+    printf("Enter id to delete: ");
+    scanf("%i", &id);
+    delete_by_id(filename, target, id);
+}
+
+
+void add(char* filename, SneakerShop * target) {
+    Sneakers * new;
+    new = malloc(sizeof(Sneakers));
+    new->id = target->last->id + 1;
+    printf("Adding new sneaker to database...\n");
+    printf("Enter name:");
+    new->name = malloc(STR_SIZE);
+    scanf("%s", new->name);
+    printf("Enter company: ");
+    new->company = malloc(STR_SIZE);
+    scanf("%s", new->company);
+    printf("Enter size: ");
+    scanf("%i", &new->size);
+    printf("Enter rating: ");
+    scanf("%f", &new->rating);
+
+    if (target->size == 0) {
+        target->first = new;
+        new->prev = NULL;
+    } else {
+        new->prev = target->last;
+        target->last->next = new;
+
+    }
+    target->last = new;
+    new->next = NULL;
+    target->size++;
+    update_file(filename, target);
+}
+
+
+void edit(char* filename, SneakerShop * target) {
+    int id, mode, int_data1, int_data2;
+    printf("Enter id to edit: ");
+    scanf("%i", &id);
+    Sneakers * cur, *sneaker_to_edit = NULL;
+    cur = target->first;
+    while (cur != NULL) {
+        if (cur->id == id) sneaker_to_edit = cur;
+        cur = cur->next;
+    }
+
+    if (sneaker_to_edit == NULL) {
+        printf("Nothing found\n");
+        return;
+    }
+
+    printf("Sneakers to edit:\n");
+    print_sneaker(sneaker_to_edit);
+    mode = 0;
+    while (mode != 1) {
+        printf("Choose parameter to find:\n1 - exit to menu\n2 - name\n3 - company\n4 - size\n5 - rating\n");
+        scanf("\n%i", &mode);
+        if (mode < 0 || mode > 5) {
+            printf("WRONG INPUT\n");
+        } else if (mode == 2) {
+            printf("Enter new name: ");
+            scanf("%s", sneaker_to_edit->name);
+            printf("Name was changed\n");
+            update_file(filename, target);
+            printf("Result:\n");
+            print_sneaker(sneaker_to_edit);
+        } else if (mode == 3) {
+            printf("Enter new company: ");
+            scanf("%s", sneaker_to_edit->company);
+            printf("Company was changed\n");
+            update_file(filename, target);
+            printf("Result:\n");
+            print_sneaker(sneaker_to_edit);
+        } else if (mode == 4) {
+            printf("Enter new size: ");
+            scanf("%s", sneaker_to_edit->size);
+            printf("Size was changed\n");
+            update_file(filename, target);
+            printf("Result:\n");
+            print_sneaker(sneaker_to_edit);
+        } else if (mode == 5) {
+            printf("Enter new rating: ");
+            scanf("%f", &sneaker_to_edit->rating);
+            printf("Rating was changed\n");
+            update_file(filename, target);
+            printf("Result:\n");
+            print_sneaker(sneaker_to_edit);
+        }
+    }
+}
+
+
+void help() {
+    printf("The electronic file contains information about sneakers. Use the main and sub menus to navigate.\n");
+};
+
+
+int main() {
+    int mode;
+    char filepath[STR_SIZE];
+    SneakerShop sneakerList;
+    printf("Enter filepath: ");
+    scanf("%s", filepath);
+    // strcpy(filepath, "/Users/valentinburmakin/CLionProjects/untitled/abobus.csv");
+    read_csv(filepath, &sneakerList);
+
+    mode = 0;
+    while (mode != 1) {
+        printf("\nChoose parameter to find:\n1 - exit\n2 - print data\n"
+               "3 - find data by param\n4 - delete line by id\n"
+               "5 - add new line\n6 - edit line\n7 - print sorted data\n8 - help\n");
+        scanf("\n%i", &mode);
+        if (mode < 1 || mode > 8) {
+            printf("WRONG INPUT\n");
+        } else if (mode == 2) {
+            print_list(&sneakerList);
+        } else if (mode == 3) {
+            print_list_by_param(&sneakerList);
+        } else if (mode == 4) {
+            delete(filepath, &sneakerList);
+        } else if (mode == 5) {
+            add(filepath, &sneakerList);
+        } else if (mode == 6) {
+            edit(filepath, &sneakerList);
+        } else if (mode == 7) {
+            print_sorted_list(&sneakerList);
+        } else if (mode == 8) {
+            help();
+        }
+    }
+}
